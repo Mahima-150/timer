@@ -1,42 +1,46 @@
-module top_module (
+module timer(
     input clk,
-    input reset,      // Synchronous reset
+    input reset,
     input data,
-    output [3:0] count,
+    output reg [3:0] count,
     output counting,
     output done,
-    input ack );
+    input ack
+    );
+     parameter idle = 0, s1 = 1, s2 = 2, s3 = 3, b0 = 4, b1 = 5;
+    parameter b2 = 6, b3 = 7, counts = 8, waiting = 9;
+    reg [3:0] state, next_state;
+    reg [9:0] counter;
 
-    parameter s=0,s1=1, s11=2,s110=3,b0=4,b1=5,b2=6, b3=7, counts=8,waiting=9;
-    reg [3:0]state, next;
-    reg [9:0]counter;
-    
-    always@(*) begin
+    always @(*) begin
         case (state)
-            s: next=data?s1:s;
-            s1: next=data?s11:s;
-            s11: next=data?s11:s110;
-            s110: next=data?b0:s;
-            b0: next=b1;
-            b1: next=b2;
-            b2: next=b3;
-            b3: next=counts;
-            counts: next=(count==0 && counter==999)?waiting:counts;
-            waiting: next=ack?s:waiting;
+            idle:   next_state = data ? s1 : idle;
+            s1:     next_state = data ? s2 : idle;
+            s2:     next_state = data ? s2 : s3;
+            s3:     next_state = data ? b0 : idle;
+            b0:     next_state = b1;
+            b1:     next_state = b2;
+            b2:     next_state = b3;
+            b3:     next_state = counts;
+            counts: next_state = (count == 0 && counter == 49) ? waiting : counts;
+            waiting:next_state = ack ? idle : waiting;
         endcase
     end
-    
-    always@(posedge clk) begin
-        if(reset) begin
-            count<=0;
-            counter<=0;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            count <= 0;
+            counter <= 0;
         end
         else begin
-            if(state==b0 | state==b1 | state==b2 | state==b3)
-                count<={count[2:0],data};
-            else if(state==counts) begin
+            case (state)
+                b0: count[3] <= data;
+                b1: count[2] <= data;
+                b2: count[1] <= data;
+                b3: count[0] <= data;
+                counts: begin
                     if (count >= 0) begin
-                        if (counter < 999) begin
+                        if (counter < 49) begin
                             counter <= counter + 1;
                         end
                         else begin
@@ -45,14 +49,25 @@ module top_module (
                         end
                     end
                 end
-            end
+                
+                default: counter <= 0;
+            endcase
         end
-    
-    
-    always@(posedge clk) begin
-        if(reset) state<=s;
-        else state<=next;
     end
+
+    always @(posedge clk) begin
+        if (reset) begin
+            state <= idle;
+        end
+        else begin
+            state <= next_state;
+        end
+    end
+
+    assign counting = (state == counts);
+    assign done = (state == waiting);
+endmodule
+
     
     assign counting= state==counts;
     assign done= state==waiting;
